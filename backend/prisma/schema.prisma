@@ -1,0 +1,333 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+// Enums
+
+enum RoleType {
+  OWNER
+  ADMIN
+  PERSONAL_TRAINER
+  MEMBER
+}
+
+enum PaymentStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+enum CheckLogType {
+  CHECK_IN
+  CHECK_OUT
+  AUTO_CHECK_OUT
+}
+
+enum BookingStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  COMPLETED
+  CANCELLED
+}
+
+// Core: User
+
+model User {
+  id                String    @id @default(uuid())
+  email             String    @unique
+  passwordHash      String?
+  fullName          String
+  phone             String?
+  role              RoleType  @default(MEMBER)
+  isEmailVerified   Boolean   @default(false)
+  emailVerifyToken  String?   @unique
+  emailVerifyExpiry DateTime?
+  googleId          String?   @unique
+  ktaNumber         String?   @unique
+  resetPasswordToken  String?   @unique
+  resetPasswordExpiry DateTime?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  memberships      Membership[]
+  pushSubscriptions PushSubscription[]
+  dropInVisitsRecorded DropInVisit[]
+  warungTransactionsRecorded WarungTransaction[]
+  checkInLogs      CheckInLog[]
+  refreshTokens     RefreshToken[]
+  payments         Payment[]
+  notifications    Notification[]
+  trainerProfile   TrainerProfile?
+  bookingsAsMember PtBooking[]     @relation("MemberBookings")
+
+  @@map("users")
+}
+
+model RefreshToken {
+  id          String    @id @default(uuid())
+  tokenHash   String    @unique
+  userId      String
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userAgent   String?
+  ipAddress   String?
+  isRevoked   Boolean   @default(false)
+  expiresAt   DateTime
+
+  createdAt   DateTime  @default(now())
+
+  @@index([userId])
+  @@map("refresh_tokens")
+}
+
+model DropInVisit {
+  id              String    @id @default(uuid())
+  visitorName     String
+  visitorPhone    String?
+  amount          Decimal   @db.Decimal(10, 2)
+  checkInTime     DateTime  @default(now())
+  checkOutTime    DateTime?
+  recordedBy      String
+  recordedByUser  User      @relation(fields: [recordedBy], references: [id])
+  createdAt       DateTime  @default(now())
+
+  @@map("drop_in_visits")
+}
+
+// Membership & Payment
+
+model MembershipPlan {
+  id             String   @id @default(uuid())
+  name           String
+  durationDays   Int
+  price          Decimal  @db.Decimal(10, 2)
+  isActive       Boolean  @default(true)
+  ptSessionQuota Int      @default(0)
+
+  memberships Membership[]
+
+  @@map("membership_plans")
+}
+
+model Membership {
+  id                  String    @id @default(uuid())
+  userId              String
+  planId              String
+  startDate           DateTime?
+  endDate             DateTime?
+  status              String    @default("PENDING")
+  ptSessionsRemaining Int       @default(0)
+  createdAt           DateTime  @default(now())
+
+  user    User           @relation(fields: [userId], references: [id])
+  plan    MembershipPlan @relation(fields: [planId], references: [id])
+  payment Payment?
+
+  @@index([userId, status, endDate])
+  @@map("memberships")
+}
+
+model Payment {
+  id            String        @id @default(uuid())
+  membershipId  String        @unique
+  userId        String
+  amount        Decimal       @db.Decimal(10, 2)
+  proofImageUrl String
+  status        PaymentStatus @default(PENDING)
+  reviewedBy    String?
+  reviewedAt    DateTime?
+  createdAt     DateTime      @default(now())
+
+  membership Membership @relation(fields: [membershipId], references: [id])
+  user       User       @relation(fields: [userId], references: [id])
+
+  @@index([status])
+  @@map("payments")
+}
+
+// QR & Check-in
+
+model QrToken {
+  id        String   @id @default(uuid())
+  token     String   @unique
+  expiresAt DateTime
+  isUsed    Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  checkInLogs CheckInLog[]
+
+  @@map("qr_tokens")
+}
+
+model CheckInLog {
+  id              String       @id @default(uuid())
+  userId          String
+  qrTokenId       String?
+  type            CheckLogType
+  latitude        Decimal?     @db.Decimal(9, 6)
+  longitude       Decimal?     @db.Decimal(9, 6)
+  distanceMeters  Float?
+  durationMinutes Int?
+  createdAt       DateTime     @default(now())
+
+  user    User     @relation(fields: [userId], references: [id])
+  qrToken QrToken? @relation(fields: [qrTokenId], references: [id])
+
+  @@index([userId, type, createdAt])
+  @@index([type, createdAt])
+  @@map("check_in_logs")
+}
+
+// Notification
+
+model Notification {
+  id        String   @id @default(uuid())
+  userId    String
+  type      String
+  message   String
+  isRead    Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id])
+
+  @@index([userId, isRead])
+  @@map("notifications")
+}
+
+// Personal Trainer & Booking
+
+model TrainerProfile {
+  id           String  @id @default(uuid())
+  userId       String  @unique
+  bio          String?
+  specialty    String?
+  photoUrl     String?
+  isActive     Boolean @default(true)
+  instagramUrl String?
+  tiktokUrl    String?
+  facebookUrl  String?
+  whatsappUrl  String?
+
+  user      User              @relation(fields: [userId], references: [id])
+  schedules TrainerSchedule[]
+  bookings  PtBooking[]
+
+  @@map("trainer_profiles")
+}
+
+model TrainerSchedule {
+  id        String   @id @default(uuid())
+  trainerId String
+  date      DateTime @db.Date
+  startTime DateTime
+  endTime   DateTime
+  isBooked  Boolean  @default(false)
+
+  trainer TrainerProfile @relation(fields: [trainerId], references: [id])
+  booking PtBooking?
+
+  @@index([trainerId, date])
+  @@map("trainer_schedules")
+}
+
+model PtBooking {
+  id         String        @id @default(uuid())
+  memberId   String
+  trainerId  String
+  scheduleId String        @unique
+  status     BookingStatus @default(PENDING)
+  notes      String?
+  reviewedBy String?
+  reviewedAt DateTime?
+  createdAt  DateTime      @default(now())
+
+  member   User            @relation("MemberBookings", fields: [memberId], references: [id])
+  trainer  TrainerProfile  @relation(fields: [trainerId], references: [id])
+  schedule TrainerSchedule @relation(fields: [scheduleId], references: [id])
+
+  @@index([status])
+  @@index([memberId])
+  @@index([trainerId])
+  @@map("pt_bookings")
+}
+
+// Konten Publik
+
+model Facility {
+  id          String   @id @default(uuid())
+  name        String
+  description String?  @db.Text
+  imageUrl    String?
+  sortOrder   Int      @default(0)
+  isActive    Boolean  @default(true)
+
+  @@map("facilities")
+}
+
+model GalleryImage {
+  id        String   @id @default(uuid())
+  imageUrl  String
+  caption   String?
+  category  String?
+  sortOrder Int      @default(0)
+  createdAt DateTime @default(now())
+
+  @@map("gallery_images")
+}
+
+
+model PushSubscription {
+  id        String   @id @default(uuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  endpoint  String   @unique
+  p256dh    String
+  auth      String
+  createdAt DateTime @default(now())
+
+  @@map("push_subscriptions")
+}
+
+model WarungProduct {
+  id        String   @id @default(uuid())
+  name      String
+  price     Decimal  @db.Decimal(10, 2)
+  stock     Int      @default(0)
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  transactionItems WarungTransactionItem[]
+
+  @@map("warung_products")
+}
+
+model WarungTransaction {
+  id         String   @id @default(uuid())
+  totalAmount Decimal @db.Decimal(10, 2)
+  recordedBy String
+  recordedByUser User @relation(fields: [recordedBy], references: [id])
+  createdAt  DateTime @default(now())
+
+  items WarungTransactionItem[]
+
+  @@map("warung_transactions")
+}
+
+model WarungTransactionItem {
+  id            String   @id @default(uuid())
+  transactionId String
+  transaction   WarungTransaction @relation(fields: [transactionId], references: [id], onDelete: Cascade)
+  productId     String
+  product       WarungProduct @relation(fields: [productId], references: [id])
+  productName   String
+  priceAtSale   Decimal  @db.Decimal(10, 2)
+  quantity      Int
+
+  @@map("warung_transaction_items")
+}

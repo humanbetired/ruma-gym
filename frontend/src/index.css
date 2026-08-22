@@ -1,0 +1,59 @@
+@import "tailwindcss";
+
+@theme {
+  --color-base: #2A2D34;
+  --color-base-light: #32363E;
+  --color-base-dark: #22252B;
+
+  --color-text-primary: #E8E9EB;
+  --color-text-secondary: #9A9DA6;
+  --color-neutral: #6B6E76;
+
+  --color-primary: #4A7FFF;
+  --color-primary-hover: #6B96FF;
+  --color-secondary: #FFDA1A;
+
+  --color-success: #3ECF6E;
+  --color-warning: #FFA83E;
+  --color-error: #FF5C5C;
+
+  --color-border: #3A3E46;
+
+  --font-display: "Montserrat", sans-serif;
+  --font-body: "Montserrat", sans-serif;
+  --font-mono: "JetBrains Mono", monospace;
+
+  --radius-sm: 8px;
+  --radius-DEFAULT: 12px;
+  --radius-md: 16px;
+  --radius-lg: 24px;
+  --radius-full: 9999px;
+}
+
+body {
+  font-family: var(--font-body);
+  color: var(--color-text-primary);
+  background-color: var(--color-base);
+}
+
+
+.neu-flat {
+  background: var(--color-base);
+  box-shadow:
+    6px 6px 12px var(--color-base-dark),
+    -6px -6px 12px var(--color-base-light);
+}
+
+.neu-pressed {
+  background: var(--color-base);
+  box-shadow:
+    inset 4px 4px 8px var(--color-base-dark),
+    inset -4px -4px 8px var(--color-base-light);
+}
+
+.neu-flat-sm {
+  background: var(--color-base);
+  box-shadow:
+    3px 3px 6px var(--color-base-dark),
+    -3px -3px 6px var(--color-base-light);
+}
