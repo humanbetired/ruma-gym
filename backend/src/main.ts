@@ -5,9 +5,13 @@ import { NestExpressApplication } from '@nestjs/platform-express';
 import { join } from 'path';
 import cookieParser from 'cookie-parser';
 import helmet from 'helmet';
+import { MulterExceptionFilter } from './common/filters/multer-exception.filter';
+
 
 async function bootstrap() {
   const app = await NestFactory.create<NestExpressApplication>(AppModule);
+  app.useGlobalFilters(new MulterExceptionFilter());
+
 
   app.set('trust proxy', 1);
 

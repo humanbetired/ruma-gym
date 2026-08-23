@@ -31,6 +31,11 @@ export function DropInPage() {
     }
   }
 
+  function formatRupiah(value: string) {
+  const number = value.replace(/\D/g, '');
+  return number ? Number(number).toLocaleString('id-ID') : '';
+  }
+
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
     setError('');
@@ -79,7 +84,14 @@ export function DropInPage() {
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
           <Input label="Nama Pengunjung" value={visitorName} onChange={(e) => setVisitorName(e.target.value)} required />
           <Input label="No. HP (opsional)" value={visitorPhone} onChange={(e) => setVisitorPhone(e.target.value)} />
-          <Input label="Nominal Bayar (Rp)" type="number" value={amount} onChange={(e) => setAmount(e.target.value)} required />
+          <Input
+            label="Nominal Bayar (Rp)"
+            type="text"
+            inputMode="numeric"
+            value={formatRupiah(amount)}
+            onChange={(e) => setAmount(e.target.value.replace(/\D/g, ''))}
+            required
+          />
         </div>
 
         {error && <p className="text-sm text-error mt-3">{error}</p>}

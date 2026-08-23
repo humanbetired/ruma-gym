@@ -6,7 +6,7 @@ import { calculateDistanceMeters } from '../common/utils/geo.util';
 import { Cron, CronExpression } from '@nestjs/schedule'
 
 
-const AUTO_CHECKOUT_AFTER_HOURS = 4;
+const AUTO_CHECKOUT_AFTER_HOURS = 5;
 
 @Injectable()
 export class CheckInService {
@@ -35,7 +35,7 @@ export class CheckInService {
       }
     }
 
-    const tokenResult = await this.qrService.validateAndConsumeToken(dto.token);
+    const tokenResult = await this.qrService.validateToken(dto.token);
     if (!tokenResult.valid) {
       throw new BadRequestException(tokenResult.reason);
     }
@@ -67,8 +67,6 @@ export class CheckInService {
       : null;
 
     const isCheckingOut = openCheckIn && !alreadyCheckedOutAfter;
-
-    await this.qrService.markTokenUsed(tokenResult.qrToken.id);
 
     let log;
 

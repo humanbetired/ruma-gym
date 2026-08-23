@@ -36,8 +36,13 @@ export function AdminWarungProductsPage() {
   function startEdit(product: WarungProduct) {
     setEditingId(product.id);
     setName(product.name);
-    setPrice(String(product.price));
+    setPrice(String(product.price).replace(/\D/g, ''));
     setStock(String(product.stock));
+  }
+
+  function formatRupiah(value: string) {
+  const number = value.replace(/\D/g, '');
+  return number ? Number(number).toLocaleString('id-ID') : '';
   }
 
   function cancelEdit() {
@@ -94,7 +99,14 @@ export function AdminWarungProductsPage() {
 
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
           <Input label="Nama Barang" value={name} onChange={(e) => setName(e.target.value)} required />
-          <Input label="Harga (Rp)" type="number" value={price} onChange={(e) => setPrice(e.target.value)} required />
+          <Input
+            label="Harga (Rp)"
+            type="text"
+            inputMode="numeric"
+            value={formatRupiah(price)}
+            onChange={(e) => setPrice(e.target.value.replace(/\D/g, ''))}
+            required
+          />
           <Input label="Stok" type="number" value={stock} onChange={(e) => setStock(e.target.value)} required />
         </div>
 

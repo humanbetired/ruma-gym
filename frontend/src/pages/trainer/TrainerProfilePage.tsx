@@ -7,6 +7,8 @@ import { Input } from '../../components/ui/Input';
 import { IconInput } from '../../components/ui/IconInput';
 import { User, MessageCircle } from 'lucide-react';
 import axios from 'axios';
+import { validateImageSize } from '../../utils/fileValidation';
+
 
 function TikTokIcon() {
   return (
@@ -101,14 +103,26 @@ export function TrainerProfilePage() {
     const file = e.target.files?.[0];
     if (!file) return;
 
+    const sizeError = validateImageSize(file);
+    if (sizeError) {
+      setPhotoError(sizeError);
+      e.target.value = '';
+      return;
+    }
+
     setPhotoError('');
     setIsUploadingPhoto(true);
 
     try {
       const updated = await uploadMyTrainerPhoto(file);
       setProfile(updated);
-    } catch {
-      setPhotoError('Gagal mengunggah foto.');
+    } catch (err) {
+      if (axios.isAxiosError(err) && err.response?.data?.message) {
+        const msg = err.response.data.message;
+        setPhotoError(Array.isArray(msg) ? msg.join(', ') : msg);
+      } else {
+        setPhotoError('Gagal mengunggah foto.');
+      }
     } finally {
       setIsUploadingPhoto(false);
     }

@@ -1,20 +1,25 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { io, Socket } from 'socket.io-client';
 import { QRCodeSVG } from 'qrcode.react';
 import { getRecentCheckIns } from '../../api/checkin';
+import { getCurrentStaticQrToken } from '../../api/qr';
 import type { CheckInLogWithUser } from '../../api/checkin';
-import { LogIn, LogOut, QrCode } from 'lucide-react';
+import { LogIn, LogOut, QrCode, Download } from 'lucide-react';
 
 export function CheckInFeedPage() {
   const [logs, setLogs] = useState<CheckInLogWithUser[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [qrToken, setQrToken] = useState<string | null>(null);
-  const [isQrConnected, setIsQrConnected] = useState(false);
+  const downloadQrRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     getRecentCheckIns()
       .then(setLogs)
       .finally(() => setIsLoading(false));
+  }, []);
+
+  useEffect(() => {
+    getCurrentStaticQrToken().then((result) => setQrToken(result.token));
   }, []);
 
   useEffect(() => {
@@ -24,23 +29,51 @@ export function CheckInFeedPage() {
       setLogs((prev) => [newLog, ...prev].slice(0, 20));
     });
 
-    const qrSocket: Socket = io(`${import.meta.env.VITE_API_URL}/qr`);
-
-    qrSocket.on('connect', () => setIsQrConnected(true));
-    qrSocket.on('disconnect', () => setIsQrConnected(false));
-    qrSocket.on('qr:rotate', (data: { token: string }) => {
-      setQrToken(data.token);
-    });
-
     return () => {
       checkInSocket.disconnect();
-      qrSocket.disconnect();
     };
   }, []);
+
+  function handleDownloadQr() {
+    const svgElement = downloadQrRef.current?.querySelector('svg');
+    if (!svgElement) return;
+
+    const svgString = new XMLSerializer().serializeToString(svgElement);
+    const svgDataUrl = `data:image/svg+xml;base64,${btoa(svgString)}`;
+
+    const image = new Image();
+    image.onload = () => {
+      const scale = 4;
+      const canvas = document.createElement('canvas');
+      canvas.width = image.width * scale;
+      canvas.height = image.height * scale;
+
+      const ctx = canvas.getContext('2d');
+      if (!ctx) return;
+
+      ctx.fillStyle = '#FFFFFF';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      ctx.drawImage(image, 0, 0, canvas.width, canvas.height);
+
+      const pngUrl = canvas.toDataURL('image/png');
+
+      const link = document.createElement('a');
+      link.href = pngUrl;
+      link.download = 'qr-presensi-ruma-gym.png';
+      link.click();
+    };
+    image.src = svgDataUrl;
+  }
 
   return (
     <div>
       <h1 className="text-2xl font-bold mb-6 text-text-primary">Live Check-in Feed</h1>
+
+      {qrToken && (
+        <div ref={downloadQrRef} style={{ position: 'absolute', left: '-9999px', top: '-9999px' }}>
+          <QRCodeSVG value={qrToken} size={512} bgColor="#FFFFFF" fgColor="#000000" />
+        </div>
+      )}
 
       <div className="grid grid-cols-1 lg:grid-cols-[320px_1fr] gap-6">
         <div className="neu-flat rounded-xl p-6 flex flex-col items-center gap-4 h-fit">
@@ -59,10 +92,15 @@ export function CheckInFeedPage() {
             )}
           </div>
 
-          <p className={`text-xs flex items-center gap-1.5 ${isQrConnected ? 'text-success' : 'text-text-secondary'}`}>
-            <span className={`w-1.5 h-1.5 rounded-full ${isQrConnected ? 'bg-success' : 'bg-neutral'}`} />
-            {isQrConnected ? 'QR aktif' : 'Menghubungkan...'}
-          </p>
+          {qrToken && (
+            <button
+              onClick={handleDownloadQr}
+              className="flex items-center gap-2 text-sm font-semibold text-primary hover:brightness-110 transition-all"
+            >
+              <Download size={16} />
+              Download QR
+            </button>
+          )}
         </div>
 
         <div>

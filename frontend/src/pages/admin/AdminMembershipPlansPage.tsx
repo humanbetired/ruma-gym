@@ -37,8 +37,13 @@ export function AdminMembershipPlansPage() {
     setEditingId(plan.id);
     setName(plan.name);
     setDurationDays(String(plan.durationDays));
-    setPrice(String(plan.price));
+    setPrice(String(plan.price).replace(/\D/g, ''));
     setPtSessionQuota(String(plan.ptSessionQuota));
+  }
+
+  function formatRupiah(value: string) {
+  const number = value.replace(/\D/g, '');
+  return number ? Number(number).toLocaleString('id-ID') : '';
   }
 
   function cancelEdit() {
@@ -101,7 +106,14 @@ export function AdminMembershipPlansPage() {
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <Input label="Nama Paket" value={name} onChange={(e) => setName(e.target.value)} required />
           <Input label="Durasi (hari)" type="number" value={durationDays} onChange={(e) => setDurationDays(e.target.value)} required />
-          <Input label="Harga (Rp)" type="number" value={price} onChange={(e) => setPrice(e.target.value)} required />
+          <Input
+            label="Harga (Rp)"
+            type="text"
+            inputMode="numeric"
+            value={formatRupiah(price)}
+            onChange={(e) => setPrice(e.target.value.replace(/\D/g, ''))}
+            required
+          />
           <Input label="Kuota Sesi PT" type="number" value={ptSessionQuota} onChange={(e) => setPtSessionQuota(e.target.value)} placeholder="0" />
         </div>
 

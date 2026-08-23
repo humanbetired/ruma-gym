@@ -65,7 +65,7 @@ Calon member mendaftar akun dan memverifikasi alamat email sebelum dapat login. 
 
 ### Check-in Berbasis QR Code
 
-Layar yang terpasang di gym menampilkan QR code yang berotasi setiap lima belas detik. Rotasi ini dipicu oleh sebuah service backend yang menerbitkan token sekali pakai, kemudian menyiarkannya ke seluruh klien yang terhubung melalui WebSocket. Saat member memindai QR code melalui aplikasi, sistem memvalidasi token tersebut, memverifikasi lokasi geografis member menggunakan formula Haversine untuk memastikan jarak dari titik gym berada dalam radius yang diizinkan, lalu mencatat aksi tersebut sebagai check-in atau check-out tergantung status kunjungan member pada hari itu. Sesi yang lupa ditutup akan diselesaikan secara otomatis oleh proses terjadwal.
+Layar yang terpasang di gym menampilkan QR code statis yang dapat dipindai oleh member melalui aplikasi. Setelah QR code dipindai, sistem memvalidasi data check-in dan memverifikasi lokasi geografis member menggunakan formula Haversine untuk memastikan jarak dari titik gym masih berada dalam radius yang diizinkan. Jika valid, sistem mencatat aksi tersebut sebagai check-in atau check-out berdasarkan status kunjungan member pada hari itu. Sesi yang lupa ditutup akan diselesaikan secara otomatis oleh proses terjadwal.
 
 ### Booking Sesi Personal Trainer
 
@@ -89,9 +89,9 @@ Backend mengikuti arsitektur modular NestJS dengan pemisahan tegas antara contro
 
 Operasi yang melibatkan perubahan pada lebih dari satu tabel sekaligus dibungkus dalam transaksi basis data untuk menjamin atomicity. Contoh operasi semacam ini adalah persetujuan pembayaran yang turut mengaktifkan membership dan menerbitkan nomor KTA, serta persetujuan booking yang turut mengurangi kuota sesi PT.
 
-Komunikasi antar service yang saling bergantung namun tidak boleh terikat erat diselesaikan menggunakan pola event emitter. Rotasi QR code adalah contoh penerapannya: service QR menerbitkan event setiap kali token baru dibuat, dan gateway WebSocket yang mendengarkan event tersebut yang bertanggung jawab menyiarkannya ke klien, tanpa kedua komponen tersebut perlu saling mengenal secara langsung.
+Komunikasi antar-service yang saling bergantung namun tidak boleh terikat erat diselesaikan menggunakan pola event emitter pada proses bisnis yang membutuhkannya. Sementara itu, mekanisme check-in menggunakan QR code statis sehingga tidak memerlukan WebSocket maupun proses rotasi QR secara real-time.
 
-Autentikasi menggunakan kombinasi access token berumur pendek yang disimpan di memori sisi klien, dan refresh token berumur panjang yang disimpan sebagai cookie httpOnly. Refresh token disimpan di basis data sebagai hash pada tabel terpisah, mendukung sesi ganda dari beberapa perangkat sekaligus. Setiap kali refresh token digunakan, token tersebut dirotasi, yaitu ditandai tidak berlaku dan digantikan dengan token baru. Apabila token yang telah ditandai tidak berlaku tersebut digunakan kembali, sistem menafsirkannya sebagai indikasi pencurian token dan mengakhiri seluruh sesi milik pengguna tersebut sebagai tindakan pengamanan.
+Autentikasi menggunakan kombinasi access token berumur pendek yang disimpan di memori sisi klien dan refresh token berumur panjang yang disimpan sebagai cookie httpOnly. Refresh token disimpan di basis data sebagai hash pada tabel terpisah, mendukung sesi ganda dari beberapa perangkat sekaligus. Setiap kali refresh token digunakan, token tersebut dirotasi, yaitu ditandai tidak berlaku dan digantikan dengan token baru. Apabila token yang telah ditandai tidak berlaku tersebut digunakan kembali, sistem menafsirkannya sebagai indikasi pencurian token dan mengakhiri seluruh sesi milik pengguna tersebut sebagai tindakan pengamanan.
 
 ## Entity Relationship Diagram
 

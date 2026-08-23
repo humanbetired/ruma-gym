@@ -7,11 +7,13 @@ import { Input } from '../../components/ui/Input';
 import { Copy, Check, Download, Landmark, QrCode, Upload, X } from 'lucide-react';
 import axios from 'axios';
 import { useConfirm } from '../../context/ConfirmContext';
+import { validateImageSize } from '../../utils/fileValidation';
+
 
 const BANK_INFO = {
-  bankName: 'Bank BCA',
-  accountNumber: '1234567890',
-  accountHolder: 'PT Ganesha Gym Indonesia',
+  bankName: 'BRI',
+  accountNumber: '658201019220532',
+  accountHolder: 'Renda Nur Roudhoh',
 };
 
 function BankInfoCard() {
@@ -136,18 +138,30 @@ export function MembershipPage() {
   }
 
   function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
-  const selectedFile = e.target.files?.[0];
+    const selectedFile = e.target.files?.[0];
 
-  if (!selectedFile) return;
+    if (!selectedFile) return;
 
-  setFile(selectedFile);
-  setPreview(URL.createObjectURL(selectedFile));
-  setError('');
+    const sizeError = validateImageSize(selectedFile);
+    if (sizeError) {
+      setError(sizeError);
+      e.target.value = ''; 
+      return;
+    }
+
+    setFile(selectedFile);
+    setPreview(URL.createObjectURL(selectedFile));
+    setError('');
   }
 
   function handleRemoveFile() {
     setFile(null);
     setPreview(null);
+  }
+
+  function formatRupiah(value: string) {
+  const number = value.replace(/\D/g, '');
+  return number ? Number(number).toLocaleString('id-ID') : '';
   }
 
   async function handleSubmitProof() {
@@ -245,7 +259,14 @@ export function MembershipPage() {
             </p>
 
             <div className="flex flex-col gap-4">
-              <Input label="Nominal yang ditransfer" type="number" value={amount} onChange={(e) => setAmount(e.target.value)} placeholder={Number(pendingMembership.plan.price).toLocaleString('id-ID')} />
+              <Input
+                label="Nominal yang ditransfer"
+                type="text"
+                inputMode="numeric"
+                value={formatRupiah(amount)}
+                onChange={(e) => setAmount(e.target.value.replace(/\D/g, ''))}
+                placeholder={Number(pendingMembership.plan.price).toLocaleString('id-ID')}
+              />
 
                 <div className="flex flex-col gap-1.5">
                   <label className="text-sm font-medium text-text-secondary">

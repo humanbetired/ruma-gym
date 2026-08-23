@@ -6,6 +6,8 @@ import { Button } from '../../components/ui/Button';
 import { Input } from '../../components/ui/Input';
 import { Trash2, Upload, X } from 'lucide-react';
 import { useConfirm } from '../../context/ConfirmContext';
+import { validateImageSize } from '../../utils/fileValidation';
+import axios from 'axios';
 
 export function AdminGalleryPage() {
   const confirm = useConfirm();
@@ -34,13 +36,20 @@ export function AdminGalleryPage() {
   }
 
   function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
-  const selectedFile = e.target.files?.[0];
+    const selectedFile = e.target.files?.[0];
 
-  if (!selectedFile) return;
+    if (!selectedFile) return;
 
-  setFile(selectedFile);
-  setPreview(URL.createObjectURL(selectedFile));
-  setError('');
+    const sizeError = validateImageSize(selectedFile);
+    if (sizeError) {
+      setError(sizeError);
+      e.target.value = '';
+      return;
+    }
+
+    setFile(selectedFile);
+    setPreview(URL.createObjectURL(selectedFile));
+    setError('');
   }
 
   function handleRemoveFile() {
@@ -71,8 +80,13 @@ export function AdminGalleryPage() {
       const fileInput = document.getElementById('gallery-file') as HTMLInputElement;
       if (fileInput) fileInput.value = '';
       await loadImages();
-    } catch {
-      setError('Gagal mengunggah gambar.');
+    } catch (err) {
+      if (axios.isAxiosError(err) && err.response?.data?.message) {
+        const msg = err.response.data.message;
+        setError(Array.isArray(msg) ? msg.join(', ') : msg);
+      } else {
+        setError('Gagal mengunggah gambar.');
+      }
     } finally {
       setIsSubmitting(false);
     }
