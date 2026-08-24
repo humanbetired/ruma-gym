@@ -1,8 +1,22 @@
 import axios from 'axios';
 
+declare module 'axios' {
+  interface InternalAxiosRequestConfig {
+    _retry?: boolean;
+  }
+}
+
+const BASE_URL =
+  import.meta.env.VITE_API_URL || 'http://localhost:3000';
+
 export const api = axios.create({
-  baseURL: import.meta.env.VITE_API_URL || 'http://localhost:3000',
-  withCredentials: true, 
+  baseURL: BASE_URL,
+  withCredentials: true,
+});
+
+const refreshApi = axios.create({
+  baseURL: BASE_URL,
+  withCredentials: true,
 });
 
 let accessToken: string | null = null;
@@ -22,17 +36,29 @@ api.interceptors.request.use((config) => {
   return config;
 });
 
+let refreshPromise: Promise<string> | null = null;
 
-let isRefreshing = false;
-let refreshSubscribers: Array<(token: string) => void> = [];
+export function refreshAccessToken(): Promise<string> {
+  if (refreshPromise) {
+    return refreshPromise;
+  }
 
-function subscribeTokenRefresh(callback: (token: string) => void) {
-  refreshSubscribers.push(callback);
-}
+  refreshPromise = refreshApi
+    .post<{ accessToken: string }>('/auth/refresh')
+    .then((res) => {
+      const newToken = res.data.accessToken;
+      setAccessToken(newToken);
+      return newToken;
+    })
+    .catch((error) => {
+      setAccessToken(null);
+      throw error;
+    })
+    .finally(() => {
+      refreshPromise = null;
+    });
 
-function onRefreshed(token: string) {
-  refreshSubscribers.forEach((callback) => callback(token));
-  refreshSubscribers = [];
+  return refreshPromise;
 }
 
 api.interceptors.response.use(
@@ -42,35 +68,20 @@ api.interceptors.response.use(
 
     if (
       error.response?.status !== 401 ||
+      !originalRequest ||
       originalRequest.url === '/auth/refresh' ||
       originalRequest._retry
     ) {
       return Promise.reject(error);
     }
 
-    if (isRefreshing) {
-      return new Promise((resolve) => {
-        subscribeTokenRefresh((newToken) => {
-          originalRequest.headers.Authorization = `Bearer ${newToken}`;
-          resolve(api(originalRequest));
-        });
-      });
-    }
-
     originalRequest._retry = true;
-    isRefreshing = true;
 
     try {
-      const res = await api.post<{ accessToken: string }>('/auth/refresh');
-      const newToken = res.data.accessToken;
-      setAccessToken(newToken);
-      onRefreshed(newToken);
-      isRefreshing = false;
-
+      const newToken = await refreshAccessToken();
       originalRequest.headers.Authorization = `Bearer ${newToken}`;
       return api(originalRequest);
     } catch (refreshError) {
-      isRefreshing = false;
       setAccessToken(null);
       window.location.href = '/login';
       return Promise.reject(refreshError);

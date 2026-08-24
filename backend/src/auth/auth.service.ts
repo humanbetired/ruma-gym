@@ -124,124 +124,63 @@ export class AuthService {
     return { message: 'Kalau email terdaftar, link verifikasi baru sudah dikirim.' };
   }
 
-  async refreshTokens(refreshToken: string, meta: RequestMeta) {
-    let payload: { sub: string; email: string; role: string };
-    try {
-      payload = this.jwtService.verify(refreshToken, {
-        secret: process.env.JWT_REFRESH_SECRET,
-      });
-    } catch {
-      throw new UnauthorizedException('Refresh token tidak valid atau kedaluwarsa');
-    }
-    const candidateTokens = await this.prisma.refreshToken.findMany({
-      where: { userId: payload.sub },
-    });
-
-    let matchedToken: (typeof candidateTokens)[number] | null = null;
-    for (const candidate of candidateTokens) {
-      const isMatch = await bcrypt.compare(refreshToken, candidate.tokenHash);
-      if (isMatch) {
-        matchedToken = candidate;
-        break;
-      }
-    }
-
-    if (!matchedToken) {
-      throw new UnauthorizedException('Sesi tidak ditemukan, silakan login ulang');
-    }
-
-    if (matchedToken.isRevoked) {
-      await this.prisma.refreshToken.updateMany({
-        where: { userId: payload.sub },
-        data: { isRevoked: true },
-      });
-      throw new UnauthorizedException(
-        'Terdeteksi aktivitas mencurigakan. Semua sesi telah diakhiri, silakan login ulang.',
-      );
-    }
-
-    if (matchedToken.expiresAt < new Date()) {
-      throw new UnauthorizedException('Refresh token sudah kedaluwarsa, silakan login ulang');
-    }
-
-    await this.prisma.refreshToken.update({
-      where: { id: matchedToken.id },
-      data: { isRevoked: true },
-    });
-
-    const user = await this.usersService.findByEmail(payload.email);
-    if (!user) {
-      throw new UnauthorizedException('User tidak ditemukan');
-    }
-
-    return this.issueTokens(user.id, user.email, user.role, meta);
-  }
-
-  async logout(refreshToken: string) {
-    let payload: { sub: string };
-    try {
-      payload = this.jwtService.verify(refreshToken, {
-        secret: process.env.JWT_REFRESH_SECRET,
-      });
-    } catch {
-      return { message: 'Logout berhasil' };
-    }
-
-    const candidateTokens = await this.prisma.refreshToken.findMany({
-      where: { userId: payload.sub, isRevoked: false },
-    });
-
-    for (const candidate of candidateTokens) {
-      const isMatch = await bcrypt.compare(refreshToken, candidate.tokenHash);
-      if (isMatch) {
-        await this.prisma.refreshToken.update({
-          where: { id: candidate.id },
-          data: { isRevoked: true },
-        });
-        break;
-      }
-    }
-
-    return { message: 'Logout berhasil' };
-  }
-
-  async logoutAll(userId: string) {
-    await this.prisma.refreshToken.updateMany({
-      where: { userId, isRevoked: false },
-      data: { isRevoked: true },
-    });
-
-    return { message: 'Berhasil logout dari semua perangkat' };
-  }
-
-  private async issueTokens(userId: string, email: string, role: string, meta: RequestMeta) {
-    const payload = { sub: userId, email, role };
-
-    const accessToken = this.jwtService.sign(payload, {
-      secret: process.env.JWT_ACCESS_SECRET,
-      expiresIn: '15m',
-    });
-
-    const refreshToken = this.jwtService.sign(payload, {
+async refreshTokens(refreshToken: string, meta: RequestMeta) {
+  let payload: { sub: string; email: string; role: string };
+  try {
+    payload = this.jwtService.verify(refreshToken, {
       secret: process.env.JWT_REFRESH_SECRET,
-      expiresIn: '7d',
     });
-
-    const tokenHash = await bcrypt.hash(refreshToken, 10);
-    const expiresAt = new Date(Date.now() + REFRESH_TOKEN_EXPIRY_DAYS * 24 * 60 * 60 * 1000);
-
-    await this.prisma.refreshToken.create({
-      data: {
-        tokenHash,
-        userId,
-        userAgent: meta.userAgent,
-        ipAddress: meta.ipAddress,
-        expiresAt,
-      },
-    });
-
-    return { accessToken, refreshToken };
+  } catch {
+    throw new UnauthorizedException('Refresh token tidak valid atau kedaluwarsa');
   }
+
+  const user = await this.usersService.findById(payload.sub);
+  if (!user || !user.refreshTokenHash) {
+    throw new UnauthorizedException('Sesi tidak ditemukan, silakan login ulang');
+  }
+
+  const isMatch = await bcrypt.compare(refreshToken, user.refreshTokenHash);
+  if (!isMatch) {
+    throw new UnauthorizedException('Sesi tidak ditemukan, silakan login ulang');
+  }
+
+  return this.issueTokens(user.id, user.email, user.role, meta);
+}
+
+async logout(userId: string) {
+  await this.prisma.user.update({
+    where: { id: userId },
+    data: { refreshTokenHash: null },
+  });
+  return { message: 'Logout berhasil' };
+}
+
+async logoutAll(userId: string) {
+  return this.logout(userId);
+}
+
+private async issueTokens(userId: string, email: string, role: string, meta: RequestMeta) {
+  const payload = { sub: userId, email, role };
+
+  const accessToken = this.jwtService.sign(payload, {
+    secret: process.env.JWT_ACCESS_SECRET,
+    expiresIn: '15m',
+  });
+
+  const refreshToken = this.jwtService.sign(payload, {
+    secret: process.env.JWT_REFRESH_SECRET,
+    expiresIn: '7d',
+  });
+
+  const refreshTokenHash = await bcrypt.hash(refreshToken, 10);
+
+  await this.prisma.user.update({
+    where: { id: userId },
+    data: { refreshTokenHash },
+  });
+
+  return { accessToken, refreshToken };
+}
 
   async validateGoogleUser(googleProfile: { googleId: string; email: string; fullName: string }, meta: RequestMeta) {
     let user = await this.prisma.user.findUnique({ where: { googleId: googleProfile.googleId } });

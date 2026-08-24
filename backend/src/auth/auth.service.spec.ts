@@ -8,20 +8,15 @@ import { UsersService } from '../users/users.service';
 import { MailService } from '../mail/mail.service';
 import { PrismaService } from 'prisma/prisma.service';
 
-// Mock module bcrypt secara keseluruhan
-// supaya kita bisa kontrol hasil bcrypt.compare() (true/false)
-// tanpa benar-benar menjalankan hashing asli
-// (yang lambat dan tidak perlu untuk unit test logic).
 jest.mock('bcrypt');
 
 describe('AuthService', () => {
   let authService: AuthService;
 
   let prisma: {
-    refreshToken: {
-      findMany: jest.Mock;
+    user: {
+      findUnique: jest.Mock;
       update: jest.Mock;
-      updateMany: jest.Mock;
       create: jest.Mock;
     };
   };
@@ -33,12 +28,10 @@ describe('AuthService', () => {
 
   let usersService: {
     findByEmail: jest.Mock;
+    findById: jest.Mock;
   };
 
   beforeEach(async () => {
-    // Reset semua mock sebelum tiap test
-    // supaya test satu tidak "bocor" pengaturan mock-nya
-    // ke test yang lain.
     jest.clearAllMocks();
 
     const module: TestingModule = await Test.createTestingModule({
@@ -48,13 +41,6 @@ describe('AuthService', () => {
         {
           provide: PrismaService,
           useValue: {
-            refreshToken: {
-              findMany: jest.fn(),
-              update: jest.fn(),
-              updateMany: jest.fn(),
-              create: jest.fn(),
-            },
-
             user: {
               findUnique: jest.fn(),
               update: jest.fn(),
@@ -75,6 +61,7 @@ describe('AuthService', () => {
           provide: UsersService,
           useValue: {
             findByEmail: jest.fn(),
+            findById: jest.fn(),
           },
         },
 
@@ -106,106 +93,95 @@ describe('AuthService', () => {
       role: 'MEMBER',
     };
 
-    it('berhasil rotate token: token lama di-revoke, token baru diterbitkan', async () => {
-      // Arrange: siapkan skenario "token valid dan cocok"
+    it('berhasil menerbitkan token baru saat refresh token valid', async () => {
       jwtService.verify.mockReturnValue(mockPayload);
 
-      const existingToken = {
-        id: 'token-abc',
-        userId: 'user-123',
-        tokenHash: 'hashed-value',
-        isRevoked: false,
-        expiresAt: new Date(Date.now() + 1000 * 60 * 60),
-      };
-
-      prisma.refreshToken.findMany.mockResolvedValue([existingToken]);
-
-      // Token cocok
-      (bcrypt.compare as jest.Mock).mockResolvedValue(true);
-
-      usersService.findByEmail.mockResolvedValue({
+      usersService.findById.mockResolvedValue({
         id: 'user-123',
         email: 'test@example.com',
         role: 'MEMBER',
+        refreshTokenHash: 'hashed-value',
       });
 
-      prisma.refreshToken.update.mockResolvedValue({});
-      prisma.refreshToken.create.mockResolvedValue({});
+      (bcrypt.compare as jest.Mock).mockResolvedValue(true);
+
+      prisma.user.update.mockResolvedValue({});
 
       jwtService.sign.mockReturnValue('new-signed-token');
       (bcrypt.hash as jest.Mock).mockResolvedValue('new-hashed-value');
 
-      // Act
       const result = await authService.refreshTokens(
         'valid-refresh-token',
         meta,
       );
 
-      // Assert: token LAMA harus di-revoke
-      expect(prisma.refreshToken.update).toHaveBeenCalledWith({
-        where: { id: 'token-abc' },
-        data: { isRevoked: true },
+      expect(prisma.user.update).toHaveBeenCalledWith({
+        where: { id: 'user-123' },
+        data: { refreshTokenHash: 'new-hashed-value' },
       });
 
-      // Assert: token BARU harus diterbitkan
-      expect(prisma.refreshToken.create).toHaveBeenCalled();
-
-      // Assert: hasil akhir mengandung access & refresh token baru
       expect(result).toHaveProperty('accessToken');
       expect(result).toHaveProperty('refreshToken');
     });
 
-    it('mendeteksi reuse: revoke SEMUA token user saat token yang sudah revoked dipakai lagi', async () => {
+    it('menolak jika hash tidak cocok dengan yang tersimpan', async () => {
       jwtService.verify.mockReturnValue(mockPayload);
 
-      const revokedToken = {
-        id: 'token-abc',
-        userId: 'user-123',
-        tokenHash: 'hashed-value',
-        isRevoked: true,
-        expiresAt: new Date(Date.now() + 1000 * 60 * 60),
-      };
+      usersService.findById.mockResolvedValue({
+        id: 'user-123',
+        email: 'test@example.com',
+        role: 'MEMBER',
+        refreshTokenHash: 'hashed-value',
+      });
 
-      prisma.refreshToken.findMany.mockResolvedValue([revokedToken]);
+      (bcrypt.compare as jest.Mock).mockResolvedValue(false);
 
-      (bcrypt.compare as jest.Mock).mockResolvedValue(true);
-
-      prisma.refreshToken.updateMany.mockResolvedValue({ count: 3 });
-
-      // Act & Assert: harus melempar UnauthorizedException
       await expect(
-        authService.refreshTokens('stolen-refresh-token', meta),
+        authService.refreshTokens('mismatched-refresh-token', meta),
       ).rejects.toThrow(UnauthorizedException);
 
-      // Assert: SEMUA token user harus di-revoke
-      expect(prisma.refreshToken.updateMany).toHaveBeenCalledWith({
-        where: { userId: 'user-123' },
-        data: { isRevoked: true },
-      });
+      expect(prisma.user.update).not.toHaveBeenCalled();
     });
 
-    it('menolak token yang sudah lewat masa berlaku', async () => {
+    it('menolak jika user tidak memiliki refreshTokenHash tersimpan', async () => {
       jwtService.verify.mockReturnValue(mockPayload);
 
-      const expiredToken = {
-        id: 'token-abc',
-        userId: 'user-123',
-        tokenHash: 'hashed-value',
-        isRevoked: false,
-        expiresAt: new Date(Date.now() - 1000 * 60 * 60),
-      };
-
-      prisma.refreshToken.findMany.mockResolvedValue([expiredToken]);
-
-      (bcrypt.compare as jest.Mock).mockResolvedValue(true);
+      usersService.findById.mockResolvedValue({
+        id: 'user-123',
+        email: 'test@example.com',
+        role: 'MEMBER',
+        refreshTokenHash: null,
+      });
 
       await expect(
-        authService.refreshTokens('expired-refresh-token', meta),
+        authService.refreshTokens('some-refresh-token', meta),
       ).rejects.toThrow(UnauthorizedException);
 
-      // Token expired tidak boleh memicu "revoke semua sesi"
-      // karena expired adalah kondisi normal, bukan indikasi serangan.
-      expect(prisma.refreshToken.updateMany).not.toHaveBeenCalled();
+      expect(prisma.user.update).not.toHaveBeenCalled();
+    });
+
+    it('menolak jika user tidak ditemukan', async () => {
+      jwtService.verify.mockReturnValue(mockPayload);
+
+      usersService.findById.mockResolvedValue(null);
+
+      await expect(
+        authService.refreshTokens('some-refresh-token', meta),
+      ).rejects.toThrow(UnauthorizedException);
+
+      expect(prisma.user.update).not.toHaveBeenCalled();
+    });
+
+    it('menolak jika verifikasi JWT gagal', async () => {
+      jwtService.verify.mockImplementation(() => {
+        throw new Error('invalid');
+      });
+
+      await expect(
+        authService.refreshTokens('invalid-refresh-token', meta),
+      ).rejects.toThrow(UnauthorizedException);
+
+      expect(usersService.findById).not.toHaveBeenCalled();
     });
   });
 });

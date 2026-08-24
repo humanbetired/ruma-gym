@@ -91,14 +91,13 @@ Operasi yang melibatkan perubahan pada lebih dari satu tabel sekaligus dibungkus
 
 Komunikasi antar-service yang saling bergantung namun tidak boleh terikat erat diselesaikan menggunakan pola event emitter pada proses bisnis yang membutuhkannya. Sementara itu, mekanisme check-in menggunakan QR code statis sehingga tidak memerlukan WebSocket maupun proses rotasi QR secara real-time.
 
-Autentikasi menggunakan kombinasi access token berumur pendek yang disimpan di memori sisi klien dan refresh token berumur panjang yang disimpan sebagai cookie httpOnly. Refresh token disimpan di basis data sebagai hash pada tabel terpisah, mendukung sesi ganda dari beberapa perangkat sekaligus. Setiap kali refresh token digunakan, token tersebut dirotasi, yaitu ditandai tidak berlaku dan digantikan dengan token baru. Apabila token yang telah ditandai tidak berlaku tersebut digunakan kembali, sistem menafsirkannya sebagai indikasi pencurian token dan mengakhiri seluruh sesi milik pengguna tersebut sebagai tindakan pengamanan.
+Autentikasi menggunakan kombinasi access token berumur pendek yang disimpan di memori sisi klien dan refresh token berumur panjang yang disimpan sebagai cookie httpOnly. Sistem menerapkan kebijakan sesi tunggal: hash refresh token disimpan langsung pada baris pengguna di basis data, dan setiap login baru menggantikan hash sebelumnya, sehingga login dari perangkat baru otomatis mengakhiri sesi aktif di perangkat lain.
 
 ## Entity Relationship Diagram
 
 ```mermaid
 erDiagram
     User ||--o{ Membership : "has"
-    User ||--o{ RefreshToken : "has"
     User ||--o{ DropInVisit : "records (staff)"
     User ||--o{ WarungTransaction : "records (staff)"
     User ||--o{ CheckInLog : "has"
@@ -134,19 +133,9 @@ erDiagram
         string ktaNumber UK
         string resetPasswordToken UK
         datetime resetPasswordExpiry
+        string refreshTokenHash
         datetime createdAt
         datetime updatedAt
-    }
-
-    RefreshToken {
-        string id PK
-        string tokenHash UK
-        string userId FK
-        string userAgent
-        string ipAddress
-        boolean isRevoked
-        datetime expiresAt
-        datetime createdAt
     }
 
     DropInVisit {
@@ -311,7 +300,7 @@ erDiagram
 
 ## Keamanan
 
-- Autentikasi berbasis JWT dengan refresh token rotation dan deteksi penggunaan ulang token yang telah dicabut
+- Autentikasi berbasis JWT dengan kebijakan sesi tunggal, sehingga login baru otomatis mengakhiri sesi aktif sebelumnya
 - Refresh token disimpan sebagai cookie httpOnly, tidak dapat diakses melalui JavaScript sisi klien
 - Rate limiting pada endpoint autentikasi untuk mencegah upaya brute force dan penyalahgunaan pengiriman email
 - Validasi input berlapis menggunakan DTO dan class-validator dengan whitelist otomatis untuk mencegah mass assignment
@@ -330,7 +319,7 @@ erDiagram
 
 ## Pengujian
 
-Pengujian unit difokuskan pada logika dengan risiko tertinggi apabila terjadi kesalahan, meliputi perhitungan jarak geografis untuk validasi check-in, mekanisme rotasi dan deteksi penggunaan ulang refresh token, transaksi persetujuan pembayaran beserta penerbitan nomor KTA, dan transaksi persetujuan booking beserta pengurangan kuota sesi PT.
+Pengujian unit difokuskan pada logika dengan risiko tertinggi apabila terjadi kesalahan, meliputi perhitungan jarak geografis untuk validasi check-in, validasi refresh token pada kebijakan sesi tunggal, transaksi persetujuan pembayaran beserta penerbitan nomor KTA, dan transaksi persetujuan booking beserta pengurangan kuota sesi PT.
 
 ## Status Proyek
 

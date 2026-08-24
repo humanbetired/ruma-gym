@@ -52,6 +52,7 @@ model User {
   ktaNumber         String?   @unique
   resetPasswordToken  String?   @unique
   resetPasswordExpiry DateTime?
+  refreshTokenHash  String?
   createdAt         DateTime  @default(now())
   updatedAt         DateTime  @updatedAt
 
@@ -60,29 +61,12 @@ model User {
   dropInVisitsRecorded DropInVisit[]
   warungTransactionsRecorded WarungTransaction[]
   checkInLogs      CheckInLog[]
-  refreshTokens     RefreshToken[]
   payments         Payment[]
   notifications    Notification[]
   trainerProfile   TrainerProfile?
   bookingsAsMember PtBooking[]     @relation("MemberBookings")
 
   @@map("users")
-}
-
-model RefreshToken {
-  id          String    @id @default(uuid())
-  tokenHash   String    @unique
-  userId      String
-  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
-  userAgent   String?
-  ipAddress   String?
-  isRevoked   Boolean   @default(false)
-  expiresAt   DateTime
-
-  createdAt   DateTime  @default(now())
-
-  @@index([userId])
-  @@map("refresh_tokens")
 }
 
 model DropInVisit {

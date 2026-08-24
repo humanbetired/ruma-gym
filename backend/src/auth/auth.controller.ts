@@ -57,8 +57,9 @@ export class AuthController {
   @HttpCode(200)
   async refresh(@Req() req: Request, @Res({ passthrough: true }) res: Response) {
     const token = req.cookies?.refreshToken;
-    if (!token) throw new UnauthorizedException('Refresh token tidak ditemukan');
-
+    if (!token) {
+      throw new UnauthorizedException('Refresh token tidak ditemukan');
+    }
     const tokens = await this.authService.refreshTokens(token, this.meta(req));
     setRefreshTokenCookie(res, tokens.refreshToken);
     return { accessToken: tokens.accessToken };
@@ -67,9 +68,8 @@ export class AuthController {
   @Post('logout')
   @Auth()
   @HttpCode(200)
-  async logout(@Req() req: Request, @Res({ passthrough: true }) res: Response) {
-    const token = req.cookies?.refreshToken;
-    if (token) await this.authService.logout(token);
+  async logout(@CurrentUser() user: { userId: string }, @Res({ passthrough: true }) res: Response) {
+    await this.authService.logout(user.userId);
     clearRefreshTokenCookie(res);
     return { message: 'Logout berhasil' };
   }
